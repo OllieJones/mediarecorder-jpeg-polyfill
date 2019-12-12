@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Jpeg Media Recorder test</title>
+</head>
+
+<video id="videoElementxx" autoplay playsinline></video>
+<button id="go" >Go</button>
+<canvas id="canvasElementxx"></canvas>
+<body>
+
+<script src="js/jpegMediaRecorder.js"></script>
+<script>
+
+  document.addEventListener (
+    'DOMContentLoaded',
+    function () {
+
+
+      function handleError (error) {
+        console.log ('navigator.MediaDevices.getUserMedia error: ', error.message, error.name)
+      }
+
+      var previous = Date.now ()
+
+      function datahandler (event) {
+        var now = Date.now ()
+        var elapsed = now - previous
+        previous = now
+
+        var buf = event.data || null
+        if (buf && buf instanceof Blob && buf.size !== 0) {
+          console.log (elapsed, buf.size)
+        }
+      }
+
+      function mediaReady (stream) {
+        window.stream = stream // make stream available to browser console
+        var mediaRecorder = new MediaRecorder (stream, {mimeType: 'image/jpeg', videoBitsPerSecond: 125000})
+        mediaRecorder.addEventListener ('dataavailable', datahandler)
+        mediaRecorder.start (10)
+      }
+
+      function start () {
+        navigator.mediaDevices.getUserMedia ({video: true})
+        .then (mediaReady)
+        .catch (handleError)
+      }
+
+      var button = document.querySelector ('button#go')
+      button.addEventListener('click', start)
+
+    })
+
+</script>
+
+</body>
+</html>
