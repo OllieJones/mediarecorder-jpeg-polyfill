@@ -29,7 +29,7 @@
 
         var buf = event.data || null
         if (buf && buf instanceof Blob && buf.size !== 0) {
-          console.log (event.deltaTime, elapsed, buf.size)
+          console.log (elapsed, buf.size)
         }
       }
 
@@ -43,9 +43,9 @@
       function start () {
         const constraints = {
           video: {
-            width: { min: 160, ideal: 176, max: 352 },
-            height: { min: 120, ideal: 144, max: 288 },
-            frameRate: { min: 4, ideal: 30, max: 30 },
+            width: { min: 160, ideal: 176, max: 640 },
+            height: { min: 120, ideal: 144, max: 480 },
+            frameRate: { min: 4, ideal: 10  , max: 30 },
           },
           audio: false
         }

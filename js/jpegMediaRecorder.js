@@ -38,7 +38,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      *
      * @param {Object} options
      * @example
-     * var options = {mimeType: 'image/jpeg', videoBitsPerSecond: 125000}
+     * var options = {mimeType: 'image/jpeg', videoBitsPerSecond: 125000, pruneConsecutiveEqualFrames: false}
      * navigator.mediaDevices.getUserMedia({ video: true }).then(function (stream) {
      *   var recorder = new MediaRecorder(stream, options )
      * })
@@ -53,6 +53,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this.mimeType = options.mimeType
       }
 
+      this.pruneConsecutiveEqualFrames = options && options.pruneConsecutiveEqualFrames
       this.options = options
       /**
        * The `MediaStream` passed into the constructor.
@@ -111,6 +112,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         var framerate = this.constraints.settings.frameRate
         this.millisecondsPerFrame = 1000.0 / framerate
 
+        this.previousBlobSize = -1
+
         this.videoElement = document.createElement ('video')
         this.videoElement.autoplay = true
         this.videoElement.playsInline = true
@@ -124,36 +127,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this.state = 'recording'
         this.em.dispatchEvent (new Event ('start'))
 
-        this.recentTime = null
         if (timeslice) {
+          var actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
           this.slicing = setInterval (function (mediaRecorder) {
             if (mediaRecorder.state === 'recording') mediaRecorder.requestData ()
-          }, timeslice, this)
-        }
-
-        if (true) {
-          /* try to figure out video timing */
-          this.startWallTime = Date.now ()
-          this.recentWallTime = Date.now ()
-          this.recentVidTime = null
-
-          this.monitoring = setInterval (function (mediaRecorder) {
-            var nowWallTime = Date.now ()
-            var elapsedWallTime = nowWallTime - mediaRecorder.startWallTime
-            var deltaWallTime = nowWallTime - mediaRecorder.recentWallTime
-            var elapsedVidTime = mediaRecorder.videoElement.currentTime * 1000
-            if (!mediaRecorder.recentVidTime) mediaRecorder.recentVidTime = elapsedVidTime
-            var deltaVidTime = elapsedVidTime - mediaRecorder.recentVidTime
-            if (deltaVidTime > 0) {
-              console.log ('                   ',
-                           elapsedWallTime, deltaWallTime,
-                           elapsedVidTime.toFixed (1),
-                           deltaVidTime.toFixed (1),
-                           mediaRecorder.millisecondsPerFrame.toFixed(1))
-              mediaRecorder.recentWallTime = nowWallTime
-              mediaRecorder.recentVidTime = elapsedVidTime
-            }
-          }, 1, this)
+          }, actualTimeSlice, this)
         }
 
         return undefined
@@ -175,10 +153,10 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
         this.requestData ()
         this.state = 'inactive'
-        if (this.slicing) clearInterval (this.slicing)
-        if (this.monitoring) clearInterval (this.monitoring)
-        delete this.slicing
-        delete this.monitoring
+        if (this.slicing) {
+          clearInterval (this.slicing)
+          delete this.slicing
+        }
       },
 
       /**
@@ -227,15 +205,6 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         if (this.state === 'inactive') {
           return this.em.dispatchEvent (error ('requestData'))
         }
-        /* skip frames that haven't changed */
-        var currentTime = this.videoElement.currentTime * 1000
-        if (!this.recentTime) this.recentTime = currentTime
-        var deltaTime = currentTime - this.recentTime
-        /* no unchanged frames: using this relies on video capture frame rate setting, and accurate .currentTime */
-        if (deltaTime <= 0) return
-        /* no early frames. Relies on accurate .currentTime, but not accurate capture frame rate */
-        //if (deltaTime <= this.millisecondsPerFrame) return (no early frames)
-        this.recentTime = currentTime
 
         /* render the current frame to image */
         var width = this.videoElement.videoWidth
@@ -255,10 +224,33 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
           const start = Date.now ()
           this.canvasElement.toBlob (function (blob) {
             const elapsed = Date.now () - start
-            var event = new Event ('dataavailable')
-            event.data = blob
-            event.deltaTime = deltaTime
-            mediaRecorder.em.dispatchEvent (event)
+            if (blob && blob.size > 0) {
+              /* detection of unchanged frames */
+              var send = true
+              if (mediaRecorder.pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
+                if (mediaRecorder.previousBlobUrl) {
+                  /* we can't see into blobs, so we'll use toDataURL to compare */
+                  var url = mediaRecorder.canvasElement.toDataURL (mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                  if (url === mediaRecorder.previousBlobUrl) {
+                    send = false
+                  } else {
+                    send = true
+                    mediaRecorder.previousBlobUrl = url
+                  }
+                } else {
+                  mediaRecorder.previousBlobUrl = mediaRecorder.canvasElement.toDataURL (mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                }
+              }
+              if (send) {
+                var event = new Event ('dataavailable')
+                event.data = blob
+                mediaRecorder.em.dispatchEvent (event)
+                mediaRecorder.previousBlobSize = blob.size
+              } else {
+              }
+            } else {
+            }
+
             if (mediaRecorder.state === 'inactive') {
               mediaRecorder.em.dispatchEvent (new Event ('stop'))
             }
