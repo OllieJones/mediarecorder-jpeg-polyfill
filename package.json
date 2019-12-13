@@ -1,12 +1,12 @@
 {
   "name": "jpegrecorder",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.8.0",
+  "description": "polyfill for MediaRecorder to capture a series of JPEG or WEBP images",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Oliver Jones",
+  "license": "MIT"
 }

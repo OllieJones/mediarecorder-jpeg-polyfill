@@ -216,7 +216,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
           this.canvasElementContext.drawImage (this.videoElement, 0, 0, width, height)
           const elapsed = Date.now () - start
         } catch (err) {
-          console.error ('draw from video to canvas error', err)
+          console.error ('drawImage() error', err)
           throw err
         }
         try {
@@ -228,8 +228,9 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
               /* detection of unchanged frames */
               var send = true
               if (mediaRecorder.pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
+                /* detection of unchanged frames; time-consuming and generally not necessary */
                 if (mediaRecorder.previousBlobUrl) {
-                  /* we can't see into blobs, so we'll use toDataURL to compare */
+                  /* we can't see into blobs, so we'll use toDataURL to compare frames */
                   var url = mediaRecorder.canvasElement.toDataURL (mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
                   if (url === mediaRecorder.previousBlobUrl) {
                     send = false
@@ -256,7 +257,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
             }
           }, this.mimeType, this.imageQuality.current)
         } catch (err) {
-          console.error ('blob creation error', err)
+          console.error ('toBlob() error', err)
           throw err
         }
       },
