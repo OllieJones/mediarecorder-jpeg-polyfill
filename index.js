@@ -1,13 +1,14 @@
 'use strict'
+/* global Event */
 
 window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 'function')
-  ? MediaRecorder
+  ? window.MediaRecorder
   : (function () {
-    console.log ('polyfilling MediaRecorder')
+    console.log('polyfilling MediaRecorder')
 
     function error (method) {
-      var event = new Event ('error')
-      event.data = new Error ('Wrong state for ' + method)
+      const event = new Event('error')
+      event.data = new Error('Wrong state for ' + method)
       return event
     }
 
@@ -17,14 +18,14 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      * @returns {*}
      */
     function getStreamConstraints (stream) {
-      const tracks = stream.getVideoTracks ()
+      const tracks = stream.getVideoTracks()
       if (!tracks || !tracks.length >= 1 || !tracks[0]) return null
       const track = tracks[0]
       return {
-        settings: track.getSettings (),
-        constraints: track.getConstraints (),
-        capabilities: track.getCapabilities (),
-        track: track,
+        settings: track.getSettings(),
+        constraints: track.getConstraints(),
+        capabilities: track.getCapabilities(),
+        track: track
       }
     }
 
@@ -45,10 +46,9 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      * @class
      */
     function MediaRecorder (stream, options) {
-
       if (options && typeof options.mimeType === 'string') {
-        if (!MediaRecorder.isTypeSupported (options.mimeType)) {
-          throw new Error ('NotSupportedError: mimeType ' + options.mimeType + ' unknown')
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+          throw new Error('NotSupportedError: mimeType ' + options.mimeType + ' unknown')
         }
         this.mimeType = options.mimeType
       }
@@ -68,7 +68,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
       this.state = 'inactive'
 
       /* support for event delivery */
-      this.em = document.createDocumentFragment ()
+      this.em = document.createDocumentFragment()
 
       this.videoElement = null
       this.canvasElement = null
@@ -77,7 +77,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         current: 0.7,
         max: 0.9,
         min: 0.3,
-        step: 0.02,
+        step: 0.02
       }
     }
 
@@ -102,35 +102,34 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       start: function start (timeslice) {
         if (this.state !== 'inactive') {
-          return this.em.dispatchEvent (error ('start'))
+          return this.em.dispatchEvent(error('start'))
         }
 
-
-        this.constraints = getStreamConstraints (this.stream)
-        var width = this.constraints.settings.width
-        var height = this.constraints.settings.height
-        var framerate = this.constraints.settings.frameRate
+        this.constraints = getStreamConstraints(this.stream)
+        const width = this.constraints.settings.width
+        const height = this.constraints.settings.height
+        const framerate = this.constraints.settings.frameRate
         this.millisecondsPerFrame = 1000.0 / framerate
 
         this.previousBlobSize = -1
 
-        this.videoElement = document.createElement ('video')
+        this.videoElement = document.createElement('video')
         this.videoElement.autoplay = true
         this.videoElement.playsInline = true
         this.videoElement.style.width = width + 'px'
         this.videoElement.style.height = height + 'px'
         this.videoElement.srcObject = this.stream
 
-        this.canvasElement = document.createElement ('canvas')
-        this.canvasElementContext = this.canvasElement.getContext ('2d')
+        this.canvasElement = document.createElement('canvas')
+        this.canvasElementContext = this.canvasElement.getContext('2d')
 
         this.state = 'recording'
-        this.em.dispatchEvent (new Event ('start'))
+        this.em.dispatchEvent(new Event('start'))
 
         if (timeslice) {
-          var actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
-          this.slicing = setInterval (function (mediaRecorder) {
-            if (mediaRecorder.state === 'recording') mediaRecorder.requestData ()
+          const actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
+          this.slicing = setInterval(function (mediaRecorder) {
+            if (mediaRecorder.state === 'recording') mediaRecorder.requestData()
           }, actualTimeSlice, this)
         }
 
@@ -139,7 +138,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
       /**
        * Stop media capture and raise final `dataavailable` event with recorded data.
        *
-       * @return {undefined}
+       * @return {boolean}
        *
        * @example
        * finishButton.addEventListener('click', function () {
@@ -148,13 +147,13 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       stop: function stop () {
         if (this.state === 'inactive') {
-          return this.em.dispatchEvent (error ('stop'))
+          return this.em.dispatchEvent(error('stop'))
         }
 
-        this.requestData ()
+        this.requestData()
         this.state = 'inactive'
         if (this.slicing) {
-          clearInterval (this.slicing)
+          clearInterval(this.slicing)
           delete this.slicing
         }
       },
@@ -171,11 +170,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       pause: function pause () {
         if (this.state !== 'recording') {
-          return this.em.dispatchEvent (error ('pause'))
+          return this.em.dispatchEvent(error('pause'))
         }
 
         this.state = 'paused'
-        return this.em.dispatchEvent (new Event ('pause'))
+        return this.em.dispatchEvent(new Event('pause'))
       },
 
       /**
@@ -190,11 +189,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       resume: function resume () {
         if (this.state !== 'paused') {
-          return this.em.dispatchEvent (error ('resume'))
+          return this.em.dispatchEvent(error('resume'))
         }
 
         this.state = 'recording'
-        return this.em.dispatchEvent (new Event ('resume'))
+        return this.em.dispatchEvent(new Event('resume'))
       },
 
       /**
@@ -203,35 +202,37 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       requestData: function requestData () {
         if (this.state === 'inactive') {
-          return this.em.dispatchEvent (error ('requestData'))
+          return this.em.dispatchEvent(error('requestData'))
         }
 
         /* render the current frame to image */
-        var width = this.videoElement.videoWidth
-        var height = this.videoElement.videoHeight
+        const width = this.videoElement.videoWidth
+        const height = this.videoElement.videoHeight
         this.canvasElement.width = width
         this.canvasElement.height = height
         try {
-          const start = Date.now ()
-          this.canvasElementContext.drawImage (this.videoElement, 0, 0, width, height)
-          const elapsed = Date.now () - start
+          const start = Date.now()
+          this.canvasElementContext.drawImage(this.videoElement, 0, 0, width, height)
+          // eslint-disable-next-line no-unused-vars
+          const npmelapsed = Date.now() - start
         } catch (err) {
-          console.error ('drawImage() error', err)
+          console.error('drawImage() error', err)
           throw err
         }
         try {
           const mediaRecorder = this
-          const start = Date.now ()
-          this.canvasElement.toBlob (function (blob) {
-            const elapsed = Date.now () - start
+          const start = Date.now()
+          this.canvasElement.toBlob(function (blob) {
+            // eslint-disable-next-line no-unused-vars
+            const elapsed = Date.now() - start
             if (blob && blob.size > 0) {
               /* detection of unchanged frames */
-              var send = true
+              let send = true
               if (mediaRecorder.pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
                 /* detection of unchanged frames; time-consuming and generally not necessary */
                 if (mediaRecorder.previousBlobUrl) {
                   /* we can't see into blobs, so we'll use toDataURL to compare frames */
-                  var url = mediaRecorder.canvasElement.toDataURL (mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                  const url = mediaRecorder.canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
                   if (url === mediaRecorder.previousBlobUrl) {
                     send = false
                   } else {
@@ -239,13 +240,13 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                     mediaRecorder.previousBlobUrl = url
                   }
                 } else {
-                  mediaRecorder.previousBlobUrl = mediaRecorder.canvasElement.toDataURL (mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                  mediaRecorder.previousBlobUrl = mediaRecorder.canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
                 }
               }
               if (send) {
-                var event = new Event ('dataavailable')
+                const event = new Event('dataavailable')
                 event.data = blob
-                mediaRecorder.em.dispatchEvent (event)
+                mediaRecorder.em.dispatchEvent(event)
                 mediaRecorder.previousBlobSize = blob.size
               } else {
               }
@@ -253,15 +254,14 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
             }
 
             if (mediaRecorder.state === 'inactive') {
-              mediaRecorder.em.dispatchEvent (new Event ('stop'))
+              mediaRecorder.em.dispatchEvent(new Event('stop'))
             }
           }, this.mimeType, this.imageQuality.current)
         } catch (err) {
-          console.error ('toBlob() error', err)
+          console.error('toBlob() error', err)
           throw err
         }
       },
-
 
       /**
        * Add listener for specified event type.
@@ -278,7 +278,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * })
        */
       addEventListener: function addEventListener () {
-        this.em.addEventListener.apply (this.em, arguments)
+        this.em.addEventListener.apply(this.em, arguments)
       },
 
       /**
@@ -288,10 +288,10 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * type Event type.
        * @param {function} listener The same function used in `addEventListener`.
        *
-       * @return {function}
+       * @return {function} the removed function
        */
       removeEventListener: function removeEventListener () {
-        return this.em.removeEventListener.apply (this.em, arguments)
+        return this.em.removeEventListener.apply(this.em, arguments)
       },
 
       /**
@@ -302,8 +302,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * @return {boolean} Is event was no canceled by any listener.
        */
       dispatchEvent: function dispatchEvent () {
-        this.em.dispatchEvent.apply (this.em, arguments)
-      },
+        this.em.dispatchEvent.apply(this.em, arguments)
+      }
 
     }
     /**
@@ -316,7 +316,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      * @return {boolean} `true` on `image/jpeg` MIME type.
      */
     MediaRecorder.isTypeSupported = function isTypeSupported (mimeType) {
-      return /image\/jpeg?/.test (mimeType) || /image\/webp?/.test (mimeType)
+      return /image\/jpeg?/.test(mimeType) || /image\/webp?/.test(mimeType)
     }
 
     /**
@@ -331,4 +331,4 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
     MediaRecorder.notSupported = !navigator.mediaDevices
 
     return MediaRecorder
-  }) ()
+  })()
