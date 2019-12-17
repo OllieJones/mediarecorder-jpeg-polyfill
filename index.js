@@ -53,8 +53,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this.mimeType = options.mimeType
       }
 
-      this.pruneConsecutiveEqualFrames = options && options.pruneConsecutiveEqualFrames
-      this.options = options
+      this._pruneConsecutiveEqualFrames = options && options._pruneConsecutiveEqualFrames
+      this._options = options
       /**
        * The `MediaStream` passed into the constructor.
        * @type {MediaStream}
@@ -68,17 +68,23 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
       this.state = 'inactive'
 
       /* support for event delivery */
-      this.em = document.createDocumentFragment()
+      this._em = document.createDocumentFragment()
+      this._eventListenerCounts = []
 
-      this.videoElement = null
-      this.canvasElement = null
+      this._videoElement = null
+      this._canvasElement = null
+      this._canvasElementContext = null
 
-      this.imageQuality = {
+      this._imageQuality = {
         current: 0.7,
         max: 0.9,
         min: 0.3,
         step: 0.02
       }
+      /**
+       * Event handler when data is ready
+       * @type {function}
+       */
       this.ondataavailable = null
     }
 
@@ -103,7 +109,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       start: function start (timeslice) {
         if (this.state !== 'inactive') {
-          return this.em.dispatchEvent(error('start'))
+          return this._em.dispatchEvent(error('start'))
         }
 
         this.constraints = getStreamConstraints(this.stream)
@@ -114,18 +120,18 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
         this.previousBlobSize = -1
 
-        this.videoElement = document.createElement('video')
-        this.videoElement.autoplay = true
-        this.videoElement.playsInline = true
-        this.videoElement.style.width = width + 'px'
-        this.videoElement.style.height = height + 'px'
-        this.videoElement.srcObject = this.stream
+        this._videoElement = document.createElement('video')
+        this._videoElement.autoplay = true
+        this._videoElement.playsInline = true
+        this._videoElement.style.width = width + 'px'
+        this._videoElement.style.height = height + 'px'
+        this._videoElement.srcObject = this.stream
 
-        this.canvasElement = document.createElement('canvas')
-        this.canvasElementContext = this.canvasElement.getContext('2d')
+        this._canvasElement = document.createElement('canvas')
+        this._canvasElementContext = this._canvasElement.getContext('2d')
 
         this.state = 'recording'
-        this.em.dispatchEvent(new Event('start'))
+        this._em.dispatchEvent(new Event('start'))
 
         if (timeslice) {
           const actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
@@ -148,7 +154,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       stop: function stop () {
         if (this.state === 'inactive') {
-          return this.em.dispatchEvent(error('stop'))
+          return this._em.dispatchEvent(error('stop'))
         }
 
         this.requestData()
@@ -171,11 +177,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       pause: function pause () {
         if (this.state !== 'recording') {
-          return this.em.dispatchEvent(error('pause'))
+          return this._em.dispatchEvent(error('pause'))
         }
 
         this.state = 'paused'
-        return this.em.dispatchEvent(new Event('pause'))
+        return this._em.dispatchEvent(new Event('pause'))
       },
 
       /**
@@ -190,11 +196,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       resume: function resume () {
         if (this.state !== 'paused') {
-          return this.em.dispatchEvent(error('resume'))
+          return this._em.dispatchEvent(error('resume'))
         }
 
         this.state = 'recording'
-        return this.em.dispatchEvent(new Event('resume'))
+        return this._em.dispatchEvent(new Event('resume'))
       },
 
       /**
@@ -203,17 +209,19 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        */
       requestData: function requestData () {
         if (this.state === 'inactive') {
-          return this.em.dispatchEvent(error('requestData'))
+          return this._em.dispatchEvent(error('requestData'))
         }
 
+        if (typeof this.ondataavailable !== 'function' && (this._eventListenerCounts.dataavailable || 0) <= 0) return
+
         /* render the current frame to image */
-        const width = this.videoElement.videoWidth
-        const height = this.videoElement.videoHeight
-        this.canvasElement.width = width
-        this.canvasElement.height = height
+        const width = this._videoElement.videoWidth
+        const height = this._videoElement.videoHeight
+        this._canvasElement.width = width
+        this._canvasElement.height = height
         try {
           const start = Date.now()
-          this.canvasElementContext.drawImage(this.videoElement, 0, 0, width, height)
+          this._canvasElementContext.drawImage(this._videoElement, 0, 0, width, height)
           // eslint-disable-next-line no-unused-vars
           const npmelapsed = Date.now() - start
         } catch (err) {
@@ -223,17 +231,17 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         try {
           const mediaRecorder = this
           const start = Date.now()
-          this.canvasElement.toBlob(function (blob) {
+          this._canvasElement.toBlob(function (blob) {
             // eslint-disable-next-line no-unused-vars
             const elapsed = Date.now() - start
             if (blob && blob.size > 0) {
               /* detection of unchanged frames */
               let send = true
-              if (mediaRecorder.pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
+              if (mediaRecorder._pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
                 /* detection of unchanged frames; time-consuming and generally not necessary */
                 if (mediaRecorder.previousBlobUrl) {
                   /* we can't see into blobs, so we'll use toDataURL to compare frames */
-                  const url = mediaRecorder.canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                  const url = mediaRecorder._canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder._imageQuality.min)
                   if (url === mediaRecorder.previousBlobUrl) {
                     send = false
                   } else {
@@ -241,13 +249,13 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                     mediaRecorder.previousBlobUrl = url
                   }
                 } else {
-                  mediaRecorder.previousBlobUrl = mediaRecorder.canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder.imageQuality.min)
+                  mediaRecorder.previousBlobUrl = mediaRecorder._canvasElement.toDataURL(mediaRecorder.mimeType, mediaRecorder._imageQuality.min)
                 }
               }
               if (send) {
                 const event = new Event('dataavailable')
                 event.data = blob
-                mediaRecorder.em.dispatchEvent(event)
+                mediaRecorder._em.dispatchEvent(event)
                 if (typeof mediaRecorder.ondataavailable === 'function') {
                   mediaRecorder.ondataavailable(event)
                 }
@@ -258,9 +266,9 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
             }
 
             if (mediaRecorder.state === 'inactive') {
-              mediaRecorder.em.dispatchEvent(new Event('stop'))
+              mediaRecorder._em.dispatchEvent(new Event('stop'))
             }
-          }, this.mimeType, this.imageQuality.current)
+          }, this.mimeType, this._imageQuality.current)
         } catch (err) {
           console.error('toBlob() error', err)
           throw err
@@ -282,7 +290,13 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * })
        */
       addEventListener: function addEventListener () {
-        this.em.addEventListener.apply(this.em, arguments)
+        const name = arguments[0]
+        if (typeof name === 'string') {
+          this._eventListenerCounts[name] = (typeof this._eventListenerCounts[name] === 'number')
+            ? this._eventListenerCounts[name] + 1
+            : 1
+        }
+        this._em.addEventListener.apply(this._em, arguments)
       },
 
       /**
@@ -295,7 +309,14 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * @return {function} the removed function
        */
       removeEventListener: function removeEventListener () {
-        return this.em.removeEventListener.apply(this.em, arguments)
+        const name = arguments[0]
+        if (typeof name === 'string') {
+          this._eventListenerCounts[name] = (typeof this._eventListenerCounts[name] === 'number')
+            ? this._eventListenerCounts[name] - 1
+            : 0
+        }
+
+        return this._em.removeEventListener.apply(this._em, arguments)
       },
 
       /**
@@ -306,7 +327,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * @return {boolean} Is event was no canceled by any listener.
        */
       dispatchEvent: function dispatchEvent () {
-        this.em.dispatchEvent.apply(this.em, arguments)
+        this._em.dispatchEvent.apply(this._em, arguments)
       }
 
     }
