@@ -79,6 +79,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         min: 0.3,
         step: 0.02
       }
+      this.ondataavailable = null
     }
 
     MediaRecorder.prototype = {
@@ -247,6 +248,9 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                 const event = new Event('dataavailable')
                 event.data = blob
                 mediaRecorder.em.dispatchEvent(event)
+                if (typeof mediaRecorder.ondataavailable === 'function') {
+                  mediaRecorder.ondataavailable(event)
+                }
                 mediaRecorder.previousBlobSize = blob.size
               } else {
               }

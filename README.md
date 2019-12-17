@@ -38,14 +38,12 @@ This polyfill tries to be MediaRecorder API compatible. But it still has a few s
 * Each time it raises its dataavailable event, it delivers the most recent camera capture image, rather than all the preceding ones. In that
 sense it really isn't a recorder, but a capturere.
 
-* It doesn't support the `ondataavailable` property. Use `addEventListener` instead.
-
 * No audio. 
 
 ## Future
 
 * Add webm encapsulation.
-* Support `ondataavailable`.
+* Honor, don't ignore, videoBitsPerSecond option.
 * Pester the Safari team to stop messing around and finish their WebRTC media implementation.
 * npm
 
