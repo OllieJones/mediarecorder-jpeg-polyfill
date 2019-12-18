@@ -170,6 +170,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
           delete this.slicing
           delete this.actualTimeSlice
         }
+        return this._em.dispatchEvent(new Event('stop'))
       },
 
       /**
