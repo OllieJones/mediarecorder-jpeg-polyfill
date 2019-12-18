@@ -108,6 +108,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * })
        */
       start: function start (timeslice) {
+        if (this.slicing) {
+          clearInterval(this.slicing)
+          delete this.slicing
+          delete this.actualTimeSlice
+        }
         if (this.state !== 'inactive') {
           return this._em.dispatchEvent(error('start'))
         }
@@ -135,6 +140,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
         if (timeslice) {
           const actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
+          this.actualTimeSlice = actualTimeSlice
           this.slicing = setInterval(function (mediaRecorder) {
             if (mediaRecorder.state === 'recording') mediaRecorder.requestData()
           }, actualTimeSlice, this)
@@ -162,6 +168,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         if (this.slicing) {
           clearInterval(this.slicing)
           delete this.slicing
+          delete this.actualTimeSlice
         }
       },
 

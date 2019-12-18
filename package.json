@@ -1,6 +1,6 @@
 {
   "name": "mediarecorder-jpeg-polyfill",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "MediaRecorder video polyfill to capture a series of JPEG or WEBP images",
   "main": "index.js",
   "scripts": {
