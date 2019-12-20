@@ -1,6 +1,8 @@
 'use strict'
 /* global Event */
 
+// TODO Redmond Middle School Science Projects can't handle new Event ()
+
 window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 'function')
   ? window.MediaRecorder
   : (function () {
@@ -53,8 +55,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this.mimeType = options.mimeType
       }
 
-      this._pruneConsecutiveEqualFrames = options && options._pruneConsecutiveEqualFrames
-      this._options = options
+      this._pruneConsecutiveEqualFrames = options && options.pruneConsecutiveEqualFrames
       /**
        * The `MediaStream` passed into the constructor.
        * @type {MediaStream}
@@ -81,6 +82,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         min: 0.3,
         step: 0.02
       }
+
+      this._imagePending = false
       /**
        * Event handler when data is ready
        * @type {function}
@@ -88,6 +91,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
       this.ondataavailable = null
     }
 
+    // noinspection JSUnusedGlobalSymbols
     MediaRecorder.prototype = {
       /**
        * The MIME type that is being used for recording.
@@ -108,15 +112,16 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
        * })
        */
       start: function start (timeslice) {
-        if (this.slicing) {
-          clearInterval(this.slicing)
-          delete this.slicing
-          delete this.actualTimeSlice
+        if (this._slicing) {
+          clearInterval(this._slicing)
+          delete this._slicing
+          delete this._actualTimeSlice
         }
         if (this.state !== 'inactive') {
           return this._em.dispatchEvent(error('start'))
         }
 
+        this._imagePending = false
         this.constraints = getStreamConstraints(this.stream)
         const width = this.constraints.settings.width
         const height = this.constraints.settings.height
@@ -140,8 +145,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
         if (timeslice) {
           const actualTimeSlice = (timeslice > this.millisecondsPerFrame) ? timeslice : this.millisecondsPerFrame
-          this.actualTimeSlice = actualTimeSlice
-          this.slicing = setInterval(function (mediaRecorder) {
+          this._actualTimeSlice = actualTimeSlice
+          this._slicing = setInterval(function (mediaRecorder) {
             if (mediaRecorder.state === 'recording') mediaRecorder.requestData()
           }, actualTimeSlice, this)
         }
@@ -165,11 +170,12 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
         this.requestData()
         this.state = 'inactive'
-        if (this.slicing) {
-          clearInterval(this.slicing)
-          delete this.slicing
-          delete this.actualTimeSlice
+        if (this._slicing) {
+          clearInterval(this._slicing)
+          delete this._slicing
+          delete this._actualTimeSlice
         }
+        this._imagePending = false
         return this._em.dispatchEvent(new Event('stop'))
       },
 
@@ -219,9 +225,9 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         if (this.state === 'inactive') {
           return this._em.dispatchEvent(error('requestData'))
         }
-
         if (typeof this.ondataavailable !== 'function' && (this._eventListenerCounts.dataavailable || 0) <= 0) return
-
+        if (this._imagePending) return
+        this._imagePending = true
         /* render the current frame to image */
         const width = this._videoElement.videoWidth
         const height = this._videoElement.videoHeight
@@ -233,6 +239,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
           // eslint-disable-next-line no-unused-vars
           const npmelapsed = Date.now() - start
         } catch (err) {
+          this._imagePending = false
           console.error('drawImage() error', err)
           throw err
         }
@@ -268,14 +275,13 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                   mediaRecorder.ondataavailable(event)
                 }
                 mediaRecorder.previousBlobSize = blob.size
-              } else {
               }
-            } else {
             }
 
             if (mediaRecorder.state === 'inactive') {
               mediaRecorder._em.dispatchEvent(new Event('stop'))
             }
+            mediaRecorder._imagePending = false
           }, this.mimeType, this._imageQuality.current)
         } catch (err) {
           console.error('toBlob() error', err)
