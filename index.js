@@ -1,8 +1,6 @@
 'use strict'
 /* global Event */
 
-// TODO Redmond Middle School Science Projects can't handle new Event ()
-
 window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 'function')
   ? window.MediaRecorder
   : (function () {
@@ -55,7 +53,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this.mimeType = options.mimeType
       }
 
+      // noinspection JSUnresolvedVariable
       this._pruneConsecutiveEqualFrames = options && options.pruneConsecutiveEqualFrames
+
+      // noinspection JSUnresolvedVariable
+      this._lookbackTime = options && typeof options.lookbackTime === 'number' ? options.lookbackTime : 1000
       /**
        * The `MediaStream` passed into the constructor.
        * @type {MediaStream}
@@ -82,6 +84,12 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         min: 0.3,
         step: 0.02
       }
+
+      this._history = new Queue()
+      const videoBps = options && typeof options.videoBitsPerSecond === 'number' ? options.videoBitsPerSecond : 0
+      const bps = options && typeof options.bitsPerSecond === 'number' ? options.bitsPerSecond : 0
+      this._targetBitsPerSecond = (bps > videoBps) ? bps : videoBps
+      if (this._targetBitsPerSecond <= 0) this._targetBitsPerSecond = 250000
 
       this._imagePending = false
       /**
@@ -225,6 +233,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         if (this.state === 'inactive') {
           return this._em.dispatchEvent(error('requestData'))
         }
+        // noinspection JSUnresolvedVariable
         if (typeof this.ondataavailable !== 'function' && (this._eventListenerCounts.dataavailable || 0) <= 0) return
         if (this._imagePending) return
         this._imagePending = true
@@ -234,10 +243,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         this._canvasElement.width = width
         this._canvasElement.height = height
         try {
-          const start = Date.now()
           this._canvasElementContext.drawImage(this._videoElement, 0, 0, width, height)
-          // eslint-disable-next-line no-unused-vars
-          const npmelapsed = Date.now() - start
         } catch (err) {
           this._imagePending = false
           console.error('drawImage() error', err)
@@ -245,14 +251,36 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         }
         try {
           const mediaRecorder = this
-          const start = Date.now()
+          const history = mediaRecorder._history
+          let send = true
           this._canvasElement.toBlob(function (blob) {
-            // eslint-disable-next-line no-unused-vars
-            const elapsed = Date.now() - start
+            const now = Date.now()
             if (blob && blob.size > 0) {
+              /* bitrate measurement and control */
+              let old = history.peek()
+              while (old && typeof old.timestamp === 'number' && old.timestamp <= now - mediaRecorder._lookbackTime) {
+                /* remove older history */
+                history.dequeue()
+                old = history.peek()
+              }
+              if (old && typeof old.timestamp === 'number') {
+                const timeDifference = now - old.timestamp
+                let bitsPerSecond = 0
+                if (timeDifference > 0) {
+                  let byteSum = blob.size
+                  for (const item of history) byteSum += item.size
+                  /* bitrate over last items, inclusive of present item */
+                  bitsPerSecond = 8000 * byteSum / timeDifference
+                  /* if this item makes bitrate too large, suppress this item */
+                  if (bitsPerSecond > mediaRecorder._targetBitsPerSecond) {
+                    send = false
+                    // console.log('suppressed frame sized', blob.size, bitsPerSecond, timeDifference)
+                  }
+                }
+              }
+
               /* detection of unchanged frames */
-              let send = true
-              if (mediaRecorder._pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
+              if (send && mediaRecorder._pruneConsecutiveEqualFrames && blob.size === mediaRecorder.previousBlobSize) {
                 /* detection of unchanged frames; time-consuming and generally not necessary */
                 if (mediaRecorder.previousBlobUrl) {
                   /* we can't see into blobs, so we'll use toDataURL to compare frames */
@@ -268,10 +296,12 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                 }
               }
               if (send) {
+                history.enqueue({ timestamp: now, size: blob.size })
                 const event = new Event('dataavailable')
                 event.data = blob
                 mediaRecorder._em.dispatchEvent(event)
                 if (typeof mediaRecorder.ondataavailable === 'function') {
+                  // noinspection JSValidateTypes
                   mediaRecorder.ondataavailable(event)
                 }
                 mediaRecorder.previousBlobSize = blob.size
@@ -368,6 +398,93 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      * }
      */
     MediaRecorder.notSupported = !navigator.mediaDevices
+
+    /** Creates a new queue. A queue is a first-in-first-out (FIFO) data structure -
+     * items are added to the end of the queue and removed from the front.
+     * A queue is iterable, from the oldest to the newest entry: from front to end.
+     *     for ( const item of queue ) { }
+     */
+    class Queue {
+      constructor () {
+        // initialise the queue and offset
+        this._queue = []
+        this._offset = 0
+      }
+
+      /**
+       * Get the current length of the queue
+       * @returns {number} or 0 if the queue is empty.
+       */
+      size () {
+        return (this._queue - this._offset)
+      };
+
+      /**
+       * Get the current length of the queue
+       * @returns {number} or 0 if the queue is empty.
+       */
+      getLength () {
+        return (this._queue - this._offset)
+      };
+
+      /**
+       * Detect whether a queue is empty
+       * @returns {boolean} true if empty, false if not.
+       */
+      isEmpty () {
+        return (this._queue.length === 0)
+      };
+
+      /**
+       * Enqueues the specified item
+       * @param item
+       */
+      enqueue (item) {
+        this._queue.push(item)
+      }
+
+      /**
+       * Removes the oldest item from the queue and returns it.
+       * @returns queue item, or undefined if the queue is empty
+       */
+      dequeue () {
+        // if the queue is empty, return immediately
+        if (this._queue.length === 0) return undefined
+        // store the item at the front of the queue
+        const item = this._queue[this._offset]
+        // increment the offset and remove the free space if necessary
+        if (++this._offset * 2 >= this._queue.length) {
+          this._queue = this._queue.slice(this._offset)
+          this._offset = 0
+        }
+        // return the dequeued item
+        return item
+      }
+
+      /**
+       * Returns the item at the front of the queue (without dequeuing it).
+       * @returns queue item, or undefined if the queue is empty
+       */
+      peek () {
+        return (this._queue.length > 0 ? this._queue[this._offset] : undefined)
+      };
+
+      /**
+       * Iterator allowing
+       *      for (const item of queue) { }
+       * Yields, space-efficiently, the elements of the queue from oldest to newest.
+       * @returns {{next: next}}
+       */
+      [Symbol.iterator] () {
+        let step = this._offset
+        return {
+          next: () => {
+            if (this._queue.length <= step) return { value: undefined, done: true }
+            return { value: this._queue[step++], done: false }
+          }
+        }
+      }
+    }
 
     return MediaRecorder
   })()
