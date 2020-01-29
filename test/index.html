@@ -12,47 +12,51 @@
 <script src="../index.js"></script>
 <script>
 
-  document.addEventListener (
+  document.addEventListener(
     'DOMContentLoaded',
     function () {
 
 
       function handleError (error) {
-        console.log ('navigator.MediaDevices.getUserMedia error: ', error.message, error.name)
+        console.log('navigator.MediaDevices.getUserMedia error: ', error.message, error.name)
       }
 
-      var previous = Date.now ()
+      var previous = Date.now()
 
       function datahandler (event) {
-        var now = Date.now ()
+        var now = Date.now()
         var elapsed = now - previous
         previous = now
 
         var buf = event.data || null
         if (buf && buf instanceof Blob && buf.size !== 0) {
-          console.log (elapsed, buf.size)
+          console.log(elapsed, buf.size)
         }
       }
 
       function mediaReady (stream) {
         window.stream = stream // make stream available to browser console
-        var mediaRecorder = new MediaRecorder (stream, {mimeType: 'image/webp', videoBitsPerSecond: 125000})
-        mediaRecorder.addEventListener ('dataavailable', datahandler)
-        mediaRecorder.start (10)
+        var mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'image/webp',
+          videoBitsPerSecond: 125000,
+          qualityParameter: 0.9
+        })
+        mediaRecorder.addEventListener('dataavailable', datahandler)
+        mediaRecorder.start(10)
       }
 
       function start () {
         const constraints = {
           video: {
-            width: { min: 160, ideal: 176, max: 640 },
-            height: { min: 120, ideal: 144, max: 480 },
-            frameRate: { min: 4, ideal: 10  , max: 30 },
+            width: {min: 160, ideal: 176, max: 640},
+            height: {min: 120, ideal: 144, max: 480},
+            frameRate: {min: 4, ideal: 10, max: 30}
           },
           audio: false
         }
-        navigator.mediaDevices.getUserMedia (constraints)
-        .then (mediaReady)
-        .catch (handleError)
+        navigator.mediaDevices.getUserMedia(constraints)
+        .then(mediaReady)
+        .catch(handleError)
       }
 
       start()

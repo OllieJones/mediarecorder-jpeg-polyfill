@@ -1,7 +1,10 @@
 'use strict'
 /* global Event */
 
-window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 'function')
+window.MediaRecorder = (
+  window.MediaRecorder &&
+  typeof window.MediaRecorder === 'function' &&
+  typeof window.MediaRecorder.isTypeSupported === 'function')
   ? window.MediaRecorder
   : (function () {
     console.log('polyfilling MediaRecorder')
@@ -39,7 +42,11 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
      *
      * @param {Object} options
      * @example
-     * var options = {mimeType: 'image/jpeg', videoBitsPerSecond: 125000, pruneConsecutiveEqualFrames: false}
+     * var options = {
+     *            mimeType: 'image/jpeg',
+     *            videoBitsPerSecond: 125000,
+     *            qualityParameter: 0.75,
+     *            pruneConsecutiveEqualFrames: false}
      * navigator.mediaDevices.getUserMedia({ video: true }).then(function (stream) {
      *   var recorder = new MediaRecorder(stream, options )
      * })
@@ -55,6 +62,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
 
       // noinspection JSUnresolvedVariable
       this._pruneConsecutiveEqualFrames = options && options.pruneConsecutiveEqualFrames
+      this._qualityParameter = options && typeof options.qualityParameter === 'number' ? options.qualityParameter : 0.75
 
       // noinspection JSUnresolvedVariable
       this._lookbackTime = options && typeof options.lookbackTime === 'number' ? options.lookbackTime : 1000
@@ -79,7 +87,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
       this._canvasElementContext = null
 
       this._imageQuality = {
-        current: 0.7,
+        current: this._qualityParameter,
         max: 0.9,
         min: 0.3,
         step: 0.02
@@ -296,7 +304,7 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
                 }
               }
               if (send) {
-                history.enqueue({ timestamp: now, size: blob.size })
+                history.enqueue({timestamp: now, size: blob.size})
                 const event = new Event('dataavailable')
                 event.data = blob
                 mediaRecorder._em.dispatchEvent(event)
@@ -479,8 +487,8 @@ window.MediaRecorder = (window.MediaRecorder && typeof window.MediaRecorder === 
         let step = this._offset
         return {
           next: () => {
-            if (this._queue.length <= step) return { value: undefined, done: true }
-            return { value: this._queue[step++], done: false }
+            if (this._queue.length <= step) return {value: undefined, done: true}
+            return {value: this._queue[step++], done: false}
           }
         }
       }
